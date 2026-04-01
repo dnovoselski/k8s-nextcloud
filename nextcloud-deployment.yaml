@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nextcloud-deployment
+  namespace: nextcloud
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nextcloud
+  template:
+    metadata:
+      labels:
+        app: nextcloud
+    spec:
+      # ── Containers ──
+      containers:
+
+      # Container 1: Nextcloud FPM
+      - name: nextcloud-fpm
+        image: nextcloud:33-fpm
+        ports:
+        - containerPort: 9000
+          name: fpm
+        env:
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_PASSWORD
+          - name: MYSQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_DATABASE
+          - name: MYSQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_USER    
+          - name: MYSQL_HOST
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_HOST                                            
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "1000m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: nextcloud-pvc
+          mountPath: /var/www/html
+
+      # Container 2: Nginx sidecar
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+          name: http
+        volumeMounts:
+        - name: nextcloud-pvc
+          mountPath: /var/www/html
+          readOnly: true
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d/default.conf
+          subPath: default.conf
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+
+      # ── Volumes ──
+      volumes:
+      - name: nextcloud-pvc
+        persistentVolumeClaim:
+          claimName: nextcloud-pvc
+      - name: nginx-conf
+        configMap:
+          name: configmap-nginx-nextcloud
+
+
+

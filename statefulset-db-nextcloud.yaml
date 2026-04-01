@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mariadb-nextcloud-service
+  namespace: nextcloud
+  labels:
+    db: nextcloud
+spec:
+  clusterIP: None
+  ports:
+  - port: 3306
+    name: mariadbport
+  selector:
+    db: nextcloud
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mariadb-nextcloud-statefulset
+  namespace: nextcloud
+spec:
+  selector:
+    matchLabels:
+      db: nextcloud # has to match .spec.template.metadata.labels
+  serviceName: "mariadb-nextcloud-service"
+  replicas: 1
+  minReadySeconds: 0 # the Pod will be considered available as soon as it is ready
+  template:
+    metadata:
+      labels:
+        db: nextcloud # has to match .spec.selector.matchLabels
+    spec:
+      terminationGracePeriodSeconds: 10 ## check https://kubernetes.io/docs/tasks/run-application/force-delete-stateful-set-pod/
+      containers:
+      - name: mariadb
+        image: mariadb:11.8
+        env:
+          - name: MYSQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_DATABASE
+          - name: MYSQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_USER
+          - name: MYSQL_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_ROOT_PASSWORD
+          - name: MYSQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: secret-db-nextcloud
+                key: MYSQL_PASSWORD          
+        ports:
+        - containerPort: 3306
+          name: mariadbport
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: mariadb-nextcloud-pvc
+          mountPath: /var/lib/mysql
+  volumeClaimTemplates:  ### << No need to create PVC manualy. If replicas is always 1, data is safe. If replaca is 2, it will create new pvc
+  - metadata:
+      name: mariadb-nextcloud-pvc
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "nfs-dynamic"
+      resources:
+        requests:
+          storage: 3Gi
+
+
